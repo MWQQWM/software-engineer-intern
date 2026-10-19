@@ -5,22 +5,37 @@ set -euo pipefail
 BASE="${BASE:-http://localhost:8080}"
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 CSV="$ROOT/data/account_applications.csv"
+CURL=(curl)
+# Git Bash cannot open Unicode Unix paths with its bundled curl; use the Windows path.
+if command -v cygpath >/dev/null 2>&1; then
+  CSV="$(cygpath -w "$CSV")"
+  if command -v curl.exe >/dev/null 2>&1; then
+    CURL=(curl.exe)
+  fi
+fi
 
 python_cmd() {
-  if command -v python3 >/dev/null 2>&1; then
-    python3 "$@"
-  else
-    python "$@"
-  fi
+  local c
+  for c in python3 python; do
+    if command -v "$c" >/dev/null 2>&1; then
+      case "$(command -v "$c")" in
+        *WindowsApps*) continue ;;
+      esac
+      "$c" "$@"
+      return
+    fi
+  done
+  echo "python not found" >&2
+  return 1
 }
 
 echo "== upload"
-UPLOAD="$(curl -sS -F "file=@${CSV};type=text/csv" "$BASE/api/batches")"
+UPLOAD="$("${CURL[@]}" -sS -F "file=@${CSV};type=text/csv" "$BASE/api/batches")"
 echo "$UPLOAD"
-BATCH_ID="$(python_cmd -c "import json,sys; print(json.loads(sys.argv[1])['id'])" "$UPLOAD")"
+BATCH_ID="$(printf '%s' "$UPLOAD" | python_cmd -c "import json,sys; print(json.load(sys.stdin)['id'])")"
 
 echo "== process batch $BATCH_ID"
-curl -sS -X POST "$BASE/api/batches/$BATCH_ID/process"
+"${CURL[@]}" -sS -X POST "$BASE/api/batches/$BATCH_ID/process"
 echo
 
 echo "== wait for OCR"
@@ -56,21 +71,21 @@ print(items[0]["id"])
 PY
 )"
 
-curl -sS -X POST "$BASE/api/cases/$CASE_ID/review" \
+"${CURL[@]}" -sS -X POST "$BASE/api/cases/$CASE_ID/review" \
   -H "Content-Type: application/json" \
   -d '{"stage":1,"decision":"approve"}'
 echo
-curl -sS -X POST "$BASE/api/cases/$CASE_ID/review" \
+"${CURL[@]}" -sS -X POST "$BASE/api/cases/$CASE_ID/review" \
   -H "Content-Type: application/json" \
   -d '{"stage":2,"decision":"approve"}'
 echo
 
 echo "== export"
-EXPORT="$(curl -sS -X POST "$BASE/api/batches/$BATCH_ID/export")"
+EXPORT="$("${CURL[@]}" -sS -X POST "$BASE/api/batches/$BATCH_ID/export")"
 echo "$EXPORT"
-python_cmd -c "import json,sys; body=json.loads(sys.argv[1]); assert body.get('receipt'), body" "$EXPORT"
+printf '%s' "$EXPORT" | python_cmd -c "import json,sys; body=json.load(sys.stdin); assert body.get('receipt'), body"
 
 echo "== final batch"
-curl -sS "$BASE/api/batches/$BATCH_ID"
+"${CURL[@]}" -sS "$BASE/api/batches/$BATCH_ID"
 echo
 echo "smoke test ok"
