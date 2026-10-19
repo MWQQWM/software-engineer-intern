@@ -21,6 +21,18 @@ cd q1_api
 uvicorn app.main:app --reload
 ```
 
-Configure the API to use `http://localhost:9100/ocr/parse` and `http://localhost:9200/ingest`. Document the API configuration method after implementation.
+Configure the API with environment variables (defaults are the local mock URLs):
+
+| Variable | Default |
+|---|---|
+| `OCR_URL` | `http://localhost:9100/ocr/parse` |
+| `ONBOARDING_URL` | `http://localhost:9200/ingest` |
+| `OCR_TIMEOUT` | `5` |
+| `OCR_RETRIES` | `3` |
+| `ONBOARDING_TIMEOUT` | `8` |
+| `ONBOARDING_RETRIES` | `4` |
+| `DATABASE_PATH` | `data/app.db` under the repository root |
+
+Set them in the shell for a local run, or in `q3_deploy/.env` for Compose.
 
 Verify one batch through import, background OCR, both review stages, export, and submission to the account-opening service. Record retry and recovery evidence in [REFLECTION.md](../REFLECTION.md).
